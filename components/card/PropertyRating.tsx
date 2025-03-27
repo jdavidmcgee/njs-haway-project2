@@ -7,6 +7,7 @@ export default function PropertyRating({
 	propertyId: string;
 	inPage: boolean;
 }) {
+	console.log(`🙏 ~ propertyId:`, propertyId);
 	// temporary hardcoded data
 	const rating = 4.5;
 	const count = 100;
