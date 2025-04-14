@@ -5,6 +5,7 @@ import {
 	validateWithZodSchema,
 	imageSchema,
 	propertySchema,
+	reviewSchema
 } from './schemas';
 import db from './db';
 import { createClerkClient, currentUser } from '@clerk/nextjs/server';
@@ -38,7 +39,7 @@ const renderError = (error: unknown): { message: string } => {
 	};
 };
 
-// Fetch functions... fetchProfileImage , fetchProfile, fetchProperties, fetchFavoriteId, fetchFavorites, fetchPropertyDetails //
+// Fetch functions... fetchProfileImage , fetchProfile, fetchProperties, fetchFavoriteId, fetchFavorites, fetchPropertyDetails, fetchPropertyReviews, fetchPropertyReviewsByUser, fetchPropertyRating, findExistingReview //
 
 export const fetchProfileImage = async () => {
 	const user = await currentUser();
@@ -151,7 +152,86 @@ export const fetchPropertyDetails = async (id: string) => {
 	});
 };
 
-// Actions... createProfileAction , updateProfileAction, updateProfileImageAction, createPropertyAction, toggleFavoriteAction  //
+export const fetchPropertyReviews = async (propertyId: string) => {
+	const reviews = await db.review.findMany({
+		where: {
+			propertyId,
+		},
+		select: {
+			id: true,
+			rating: true,
+			comment: true,
+			profile: {
+				select: {
+					profileImage: true,
+					firstName: true,
+				},
+			},
+		},
+		orderBy: {
+			createdAt: 'desc',
+		},
+	});
+	return reviews;
+};
+
+export const fetchPropertyReviewsByUser = async () => {
+	const user = await getAuthUser();
+	const reviews = await db.review.findMany({
+		where: {
+			profileId: user.id,
+		},
+		select: {
+			id: true,
+			rating: true,
+			comment: true,
+			property: {
+				select: {
+					name: true,
+					image: true,
+				},
+			},
+		},
+		orderBy: {
+			createdAt: 'desc',
+		},
+	});
+	return reviews;
+};
+
+export const fetchPropertyRating = async (propertyId: string) => {
+	const result = await db.review.groupBy({
+		by: ['propertyId'],
+		_avg: {
+			rating: true,
+		},
+		_count: {
+			rating: true,
+		},
+		where: {
+			propertyId,
+		},
+	});
+	// what if we have no reviews??
+	return {
+		rating: result[0]?._avg.rating?.toFixed(1) ?? 0,
+		count: result[0]?._count.rating ?? 0,
+	};
+};
+
+export const findExistingReview = async (
+	userId: string,
+	propertyId: string
+) => {
+	return db.review.findFirst({
+		where: {
+			profileId: userId,
+			propertyId: propertyId,
+		},
+	});
+};
+
+// Actions... createProfileAction , updateProfileAction, updateProfileImageAction, createPropertyAction, toggleFavoriteAction, createReviewAction, deleteReviewAction  //
 
 export const createProfileAction = async (
 	prevState: unknown,
@@ -298,3 +378,41 @@ export const toggleFavoriteAction = async (prevState: {
 	}
 };
 
+export const createReviewAction = async (
+	prevState: unknown,
+	formData: FormData
+): Promise<{ message: string }> => {
+	const user = await getAuthUser();
+	try {
+		const rawData = Object.fromEntries(formData);
+		const validatedFields = validateWithZodSchema(reviewSchema, rawData);
+		await db.review.create({
+			data: {
+				...validatedFields,
+				profileId: user.id,
+			},
+		});
+		revalidatePath(`/properties/${validatedFields.propertyId}`);
+
+		return { message: 'review created successfully' };
+	} catch (error) {
+		return renderError(error);
+	}
+};
+
+export const deleteReviewAction = async (prevState: { reviewId: string }) => {
+	const { reviewId } = prevState;
+	const user = await getAuthUser();
+	try {
+		await db.review.delete({
+			where: {
+				id: reviewId,
+				profileId: user.id,
+			},
+		});
+		revalidatePath('/reviews');
+		return { message: 'Review deleted successfully' };
+	} catch (error) {
+		return renderError(error);
+	}
+};

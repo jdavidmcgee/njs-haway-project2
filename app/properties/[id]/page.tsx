@@ -5,14 +5,16 @@ import BreadCrumbs from '@/components/properties/BreadCrumbs';
 import ImageContainer from '@/components/properties/ImageContainer';
 import ShareButton from '@/components/properties/ShareButton';
 import { Separator } from '@/components/ui/separator';
-import { fetchPropertyDetails } from '@/utils/actions';
+import { fetchPropertyDetails, findExistingReview } from '@/utils/actions';
 import { redirect } from 'next/navigation';
 import PropertyDetails from '@/components/properties/PropertyDetails';
 import UserInfo from '@/components/properties/UserInfo';
 import Description from '@/components/properties/Description';
 import Amenities from '@/components/properties/Amenities';
 import ClientDynamicMap from '@/components/properties/ClientDynamicMap';
-
+import SubmitReview from '@/components/reviews/SubmitReview';
+import PropertyReviews from '@/components/reviews/PropertyReviews';
+import { auth } from '@clerk/nextjs/server';
 
 export default async function PropertyDetailsPage({
 	params,
@@ -28,6 +30,23 @@ export default async function PropertyDetailsPage({
 
 	const firstName = property.profile.firstName;
 	const profileImage = property.profile.profileImage;
+
+	const { userId } = await auth();
+
+	// Check if a user is logged in
+	const isLoggedIn = Boolean(userId);
+
+	// Determine if the current user is not the owner of the property
+	const userIsNotOwner = property.profile.clerkId !== userId;
+
+	// Check if a review already exists for the user on this property
+	const existingReview = userId
+		? await findExistingReview(userId, property.id)
+		: null;
+
+	// Determine if the review form should be shown, the user is logged in, the user is NOT the owner, and there IS NOT an existing review
+	const canSubmitReview = isLoggedIn && userIsNotOwner && !existingReview;
+
 	return (
 		<section>
 			<BreadCrumbs name={property.name} />
@@ -73,6 +92,11 @@ export default async function PropertyDetailsPage({
 					<BookingCalendar />
 				</div>
 			</section>
+			{/* submit review */}
+			{/* <SubmitReview propertyId={property.id} /> */}
+			{canSubmitReview && <SubmitReview propertyId={property.id} />}
+			{/* rendering reviews */}
+			<PropertyReviews propertyId={property.id} />
 		</section>
 	);
 }
