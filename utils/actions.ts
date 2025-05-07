@@ -5,13 +5,14 @@ import {
 	validateWithZodSchema,
 	imageSchema,
 	propertySchema,
-	reviewSchema
+	reviewSchema,
 } from './schemas';
 import db from './db';
 import { createClerkClient, currentUser } from '@clerk/nextjs/server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { uploadImage } from './supabase';
+import { calculateTotals } from '@/utils/calculateTotals';
 
 // Initialize Clerk client
 const clerkClient = createClerkClient({
@@ -39,7 +40,7 @@ const renderError = (error: unknown): { message: string } => {
 	};
 };
 
-// Fetch functions... fetchProfileImage , fetchProfile, fetchProperties, fetchFavoriteId, fetchFavorites, fetchPropertyDetails, fetchPropertyReviews, fetchPropertyReviewsByUser, fetchPropertyRating, findExistingReview //
+// Fetch functions... fetchProfileImage , fetchProfile, fetchProperties, fetchFavoriteId, fetchFavorites, fetchPropertyDetails, fetchPropertyReviews, fetchPropertyReviewsByUser, fetchPropertyRating, findExistingReview, fetchBookings //
 
 export const fetchProfileImage = async () => {
 	const user = await currentUser();
@@ -148,6 +149,12 @@ export const fetchPropertyDetails = async (id: string) => {
 		},
 		include: {
 			profile: true,
+			bookings: {
+				select: {
+					checkIn: true,
+					checkOut: true,
+				},
+			},
 		},
 	});
 };
@@ -231,7 +238,29 @@ export const findExistingReview = async (
 	});
 };
 
-// Actions... createProfileAction , updateProfileAction, updateProfileImageAction, createPropertyAction, toggleFavoriteAction, createReviewAction, deleteReviewAction  //
+export const fetchBookings = async () => {
+	const user = await getAuthUser();
+	const bookings = await db.booking.findMany({
+		where: {
+			profileId: user.id,
+		},
+		include: {
+			property: {
+				select: {
+					id: true,
+					name: true,
+					country: true,
+				},
+			},
+		},
+		orderBy: {
+			createdAt: 'desc',
+		},
+	});
+	return bookings;
+};
+
+// Actions... createProfileAction , updateProfileAction, updateProfileImageAction, createPropertyAction, toggleFavoriteAction, createReviewAction, deleteReviewAction, createBookingAction, deleteBookingAction  //
 
 export const createProfileAction = async (
 	prevState: unknown,
@@ -412,6 +441,57 @@ export const deleteReviewAction = async (prevState: { reviewId: string }) => {
 		});
 		revalidatePath('/reviews');
 		return { message: 'Review deleted successfully' };
+	} catch (error) {
+		return renderError(error);
+	}
+};
+
+export const createBookingAction = async (prevState: {
+	propertyId: string;
+	checkIn: Date;
+	checkOut: Date;
+}) => {
+	const user = await getAuthUser();
+	const { propertyId, checkIn, checkOut } = prevState;
+	const property = await db.property.findUnique({
+		where: { id: propertyId },
+		select: { price: true },
+	});
+	if (!property) return { message: 'Property not found' };
+	const { totalNights, totalPriceOfStay } = calculateTotals({
+		checkIn: checkIn,
+		checkOut: checkOut,
+		price: property.price,
+	});
+	try {
+		await db.booking.create({
+			data: {
+				checkIn,
+				checkOut,
+				totalNights,
+				orderTotal: totalPriceOfStay,
+				propertyId,
+				profileId: user.id,
+			},
+		});
+	} catch (error) {
+		return renderError(error);
+	}
+	redirect('/bookings');
+};
+
+export const deleteBookingAction = async (prevState: { bookingId: string }) => {
+	const { bookingId } = prevState;
+	const user = await getAuthUser();
+	try {
+		await db.booking.delete({
+			where: {
+				id: bookingId,
+				profileId: user.id,
+			},
+		});
+		revalidatePath('/bookings');
+		return { message: 'Booking deleted successfully' };
 	} catch (error) {
 		return renderError(error);
 	}

@@ -17,4 +17,4 @@ interface ClientDynamicMapProps {
 
 export default function ClientDynamicMap(props: ClientDynamicMapProps) {
 	return <DynamicMap {...props} />;
-}
+} 

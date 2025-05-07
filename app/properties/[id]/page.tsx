@@ -1,5 +1,4 @@
 import FavoriteToggleButton from '@/components/card/FavoriteToggleButton';
-import BookingCalendar from '@/components/properties/BookingCalendar';
 import PropertyRating from '@/components/card/PropertyRating';
 import BreadCrumbs from '@/components/properties/BreadCrumbs';
 import ImageContainer from '@/components/properties/ImageContainer';
@@ -15,6 +14,7 @@ import ClientDynamicMap from '@/components/properties/ClientDynamicMap';
 import SubmitReview from '@/components/reviews/SubmitReview';
 import PropertyReviews from '@/components/reviews/PropertyReviews';
 import { auth } from '@clerk/nextjs/server';
+import ClientDynamicBookingWrapper from '@/components/booking/ClientDynamicBookingWrapper';
 
 export default async function PropertyDetailsPage({
 	params,
@@ -46,6 +46,8 @@ export default async function PropertyDetailsPage({
 
 	// Determine if the review form should be shown, the user is logged in, the user is NOT the owner, and there IS NOT an existing review
 	const canSubmitReview = isLoggedIn && userIsNotOwner && !existingReview;
+
+	// console.log('Property Bookings:', property.bookings);
 
 	return (
 		<section>
@@ -89,7 +91,11 @@ export default async function PropertyDetailsPage({
 						Select start and end dates to book property
 					</p>
 					{/* calendar will be placed here */}
-					<BookingCalendar />
+					<ClientDynamicBookingWrapper
+						propertyId={property.id}
+						price={property.price}
+						bookings={property.bookings}
+					/>
 				</div>
 			</section>
 			{/* submit review */}
@@ -100,3 +106,4 @@ export default async function PropertyDetailsPage({
 		</section>
 	);
 }
+
